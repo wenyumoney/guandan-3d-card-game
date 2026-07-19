@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "paths": {
+      "@core/*": ["../src/core/*"],
+      "@ai/*": ["../src/ai/*"],
+      "@net/*": ["../src/net/*"]
+    }
+  },
+  "include": ["./**/*.ts", "../src/core/**/*.ts", "../src/ai/**/*.ts", "../src/net/**/*.ts"]
+}

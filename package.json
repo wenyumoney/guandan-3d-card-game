@@ -1,0 +1,36 @@
+{
+  "name": "guandan-3d-card-game",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "接近 3A 品质的掼蛋 3D 卡牌游戏 (Three.js)——完整规则引擎、三档 AI、国风美术、进贡升级过 A 闭环、互联网联机对战",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "tsc --noEmit && vite build",
+    "start": "npx tsx server/prod.ts",
+    "preview": "vite preview --host 127.0.0.1 --port 5188",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "coverage": "vitest run --coverage",
+    "server": "npx tsx server/index.ts",
+    "dev:server": "npx tsx scripts/dev-server.ts",
+    "test:bot": "playwright test tests/bot-playtest.spec.ts",
+    "test:prod": "playwright test tests/prod-verify.spec.ts --config=playwright.prod.config.ts",
+    "test:all": "vitest run && playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.61.1",
+    "@types/node": "^26.1.1",
+    "@types/ws": "^8.18.1",
+    "@vitest/coverage-v8": "^4.1.10",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10"
+  },
+  "dependencies": {
+    "@types/three": "^0.185.1",
+    "three": "^0.185.1",
+    "vite": "^8.1.4",
+    "ws": "^8.21.1"
+  }
+}
