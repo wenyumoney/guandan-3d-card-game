@@ -113,8 +113,9 @@ wss.on('connection', (ws: WebSocket) => {
           const c = rooms.getClient(roomCode, sm.playerId as string)
           if (c) send(c, { type: 'game_start', ...sm })
         }
-        if (r.firstTurn) broadcastToRoom(roomCode, r.firstTurn)
-        if (r.firstAiSeat != null) rooms.scheduleAiTurn(roomCode, r.firstAiSeat as Seat)
+        const rc = roomCode
+        if (r.firstTurn) { const ft = r.firstTurn; setTimeout(() => broadcastToRoom(rc, ft), 1200) }
+        if (r.firstAiSeat != null) { const aiSeat = r.firstAiSeat as Seat; setTimeout(() => rooms.scheduleAiTurn(rc, aiSeat), 1200) }
         break
       }
 
@@ -157,7 +158,11 @@ function broadcastToRoom(code: string, msg: Record<string, unknown>): void {
 }
 
 function send(ws: WebSocket, msg: Record<string, unknown>): void {
-  if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg))
+  if (ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify(msg))
+  } else {
+    console.warn(`[send] 丢弃 ${msg.type} — WebSocket 状态=${ws.readyState}`)
+  }
 }
 
 server.listen(PORT, '0.0.0.0', () => {

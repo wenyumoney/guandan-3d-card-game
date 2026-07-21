@@ -109,11 +109,16 @@ wss.on('connection', (ws: WebSocket) => {
           const client = rooms.getClient(roomCode, startMsg.playerId)
           if (client) send(client, { type: 'game_start', ...startMsg })
         }
-        // 发送初始 turn_notify
-        if (r.firstTurn) broadcastToRoom(roomCode, r.firstTurn)
-        // 如果第一个是 AI，触发 AI 决策
+        // 延迟发送 turn_notify（等客户端发牌动画 ~1.1s 完成，避免 setPlayable 灰化竞态）
+        const rc = roomCode
+        if (r.firstTurn) {
+          const ft = r.firstTurn
+          setTimeout(() => broadcastToRoom(rc, ft), 1200)
+        }
+        // 如果第一个是 AI，延迟触发 AI 决策
         if (r.firstAiSeat !== null && r.firstAiSeat !== undefined) {
-          rooms.scheduleAiTurn(roomCode, r.firstAiSeat as Seat)
+          const aiSeat = r.firstAiSeat as Seat
+          setTimeout(() => rooms.scheduleAiTurn(rc, aiSeat), 1200)
         }
         break
       }
@@ -176,6 +181,8 @@ wss.on('connection', (ws: WebSocket) => {
 function send(ws: WebSocket, msg: Record<string, unknown>): void {
   if (ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify(msg))
+  } else {
+    console.warn(`[send] 丢弃 ${msg.type} — WebSocket 状态=${ws.readyState}`)
   }
 }
 

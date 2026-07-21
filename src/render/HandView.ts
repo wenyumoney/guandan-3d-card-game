@@ -56,6 +56,7 @@ export function createHandView(scene: THREE.Scene, camera: THREE.Camera, dom: HT
   let hovered: THREE.Mesh | null = null
   let selCb: (sel: Card[]) => void = () => {}
   let dealing = false
+  let pendingPlayable: Set<string> | null = null  // 发牌动画期间缓存的 playable，动画完再应用
   const dealCancels: (() => void)[] = [] // 发牌动画的取消句柄
   let sortMode: SortMode = 'rank'
   let nCols = 1
@@ -314,6 +315,14 @@ export function createHandView(scene: THREE.Scene, camera: THREE.Camera, dom: HT
               onComplete: last
                 ? () => {
                     dealing = false
+                    // 优先应用发牌期间缓存的 playable 状态（避免被 turn_notify 提前灰化）
+                    if (pendingPlayable !== null) {
+                      const p = pendingPlayable
+                      pendingPlayable = null
+                      // 直接应用：不调 setPlayable（避免递归）
+                      if (p) for (const id of [...selected]) if (!p.has(id)) selected.delete(id)
+                      playable = p
+                    }
                     layout()
                   }
                 : undefined,
@@ -323,10 +332,15 @@ export function createHandView(scene: THREE.Scene, camera: THREE.Camera, dom: HT
       }
     },
     setPlayable(ids) {
+      // 发牌动画期间：缓存 playable 状态，动画完成回调会应用
+      if (dealing) {
+        pendingPlayable = ids
+        return
+      }
       playable = ids
       // 取消已选中的非法牌
       if (ids) for (const id of [...selected]) if (!ids.has(id)) selected.delete(id)
-      if (!dealing) layout() // 发牌中暂不落位，动画完成时的 layout 会应用
+      layout()
     },
     getSelected,
     select(ids) {
@@ -335,6 +349,7 @@ export function createHandView(scene: THREE.Scene, camera: THREE.Camera, dom: HT
       const valid = new Set(meshes.map(cardOf).map((c) => c.id))
       for (const id of ids) if (valid.has(id) && (playable === null || playable.has(id))) selected.add(id)
       if (!dealing) layout()
+      // 即使在 dealing 中也通知选中变化（不影响视觉 tint，但 callback 需要）
       selCb(getSelected())
     },
     clearSelection() {

@@ -572,15 +572,19 @@ export class RoomManager {
           client.send(JSON.stringify({ type: 'game_start', ...sm }))
         }
       }
-      // 发送 turn_notify
+      // 延迟发送 turn_notify（等客户端发牌动画完成，避免 setPlayable 灰化竞态）
       if (r.firstTurn) {
-        for (const [, conn] of room.players) {
-          if (conn.ws.readyState === WebSocket.OPEN) conn.ws.send(JSON.stringify(r.firstTurn))
-        }
+        const ft = r.firstTurn
+        setTimeout(() => {
+          for (const [, conn] of room.players) {
+            if (conn.ws.readyState === WebSocket.OPEN) conn.ws.send(JSON.stringify(ft))
+          }
+        }, 1200)
       }
-      // 触发 AI
+      // 延迟触发 AI
       if (r.firstAiSeat !== null && r.firstAiSeat !== undefined) {
-        this.scheduleAiTurn(code, r.firstAiSeat as Seat)
+        const aiSeat = r.firstAiSeat as Seat
+        setTimeout(() => this.scheduleAiTurn(code, aiSeat), 1200)
       }
     }, 5000)
   }

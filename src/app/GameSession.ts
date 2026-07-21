@@ -109,6 +109,8 @@ export class GameSession {
   private hintIdx = -1
   private hintSig = ''
   private trickLog: TrickEntry[] = []
+  private _active = true
+  private _keyHandler: ((e: KeyboardEvent) => void) | null = null
 
   constructor(private readonly deps: SessionDeps) {
     this.seed = deps.seed
@@ -123,14 +125,16 @@ export class GameSession {
     })
     deps.hud.onDifficulty((d) => this.setDifficulty(d))
     deps.hand.onSelectionChange(() => {
+      if (!this._active || !this.round) return
       this.refreshControls()
-      if (this.round?.current === 0 && !this.round?.over && this.phase === 'play') this.deps.audio.select()
+      if (this.round.current === 0 && !this.round.over && this.phase === 'play') this.deps.audio.select()
     })
     deps.hud.setActiveDifficulty(this.difficulty)
 
     // 键盘快捷键
-    const onKey = (e: KeyboardEvent): void => {
+    this._keyHandler = (e: KeyboardEvent): void => {
       if (e.target !== document.body && (e.target as HTMLElement).tagName !== 'CANVAS') return
+      if (!this._active || !this.round) return
       if (this.phase === 'return') {
         if (e.key === 'Enter') this.humanPlay()
         return
@@ -143,7 +147,16 @@ export class GameSession {
         case 'Escape': this.deps.hand.clearSelection(); break
       }
     }
-    window.addEventListener('keydown', onKey)
+    window.addEventListener('keydown', this._keyHandler)
+  }
+
+  /** 停用本实例（在线模式进入前调用），停用键盘+清除定时器，阻止回调访问未初始化的 round。 */
+  deactivate(): void {
+    this._active = false
+    if (this._keyHandler) { window.removeEventListener('keydown', this._keyHandler); this._keyHandler = null }
+    if (this.aiTimer !== null) { clearTimeout(this.aiTimer); this.aiTimer = null }
+    if (this.thinkTimer !== null) { clearInterval(this.thinkTimer); this.thinkTimer = null }
+    if (this.dealTimer !== null) { clearTimeout(this.dealTimer); this.dealTimer = null }
   }
 
   start(): void {
@@ -372,6 +385,7 @@ export class GameSession {
   }
 
   private humanPlay(): void {
+    if (!this._active || !this.round) return
     if (this.phase === 'return') { this.confirmReturn(); return }
     if (this.round.over || this.round.current !== 0) return
     const sel = this.deps.hand.getSelected()
@@ -389,6 +403,7 @@ export class GameSession {
   }
 
   private humanPass(): void {
+    if (!this._active || !this.round) return
     if (this.phase === 'return' || this.round.over || this.round.current !== 0) return
     const r = pass(this.round, 0)
     if (!r.ok) { this.deps.hud.message(r.reason ?? '不能过'); return }
@@ -409,6 +424,7 @@ export class GameSession {
 
   /** 提示：循环给出所有可能出法（弱→强，炸弹最后），每次点击前进一手。 */
   private humanHint(): void {
+    if (!this._active || !this.round) return
     if (this.phase === 'return' || this.round.over || this.round.current !== 0) return
     const table = this.round.table
     const moves = table
@@ -454,6 +470,7 @@ export class GameSession {
   }
 
   private refreshControls(): void {
+    if (!this.round) return
     if (this.phase === 'return') {
       const sel = this.deps.hand.getSelected()
       const ok = sel.length === 1 && sel[0].suit !== 'JOKER' && straightValue(sel[0]) <= 10

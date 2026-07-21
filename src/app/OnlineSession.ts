@@ -138,6 +138,7 @@ export class OnlineSession {
       const sp = msg.seatPlayers[s]
       this.handCounts[s] = sp ? sp.cardCount : 27
     }
+    this.current = msg.localSeat // 初始轮次：服务端 tur_notify 会纠正，此处防止 delay 丢失
     this.deps.hud.setCounts(this.handCounts, -1)
     this.deps.hud.setTurn('等待…')
     this.deps.hud.setControls({ canPlay: false, canPass: false, canHint: false })

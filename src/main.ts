@@ -88,6 +88,7 @@ const wsUrl = import.meta.env.DEV
   : `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}`
 
 const startOnline = (): void => {
+  session.deactivate() // 停用离线 GameSession，避免回调冲突
   createLobby(app, {
     serverUrl: wsUrl,
     playerName: '',
