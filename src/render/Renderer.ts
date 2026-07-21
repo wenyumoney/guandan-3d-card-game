@@ -61,7 +61,7 @@ export function createRenderer(container: HTMLElement): RenderContext {
   composer.addPass(new RenderPass(scene, camera))
   const bloom = new UnrealBloomPass(
     new THREE.Vector2(container.clientWidth, container.clientHeight),
-    0.35, // strength：低强度泛光，只做柔和光晕不刺眼
+    0.18, // strength：微弱泛光，仅做隐约光晕
     0.5, // radius
     0.85, // threshold：仅高亮处泛光，避免整体发糊
   )
