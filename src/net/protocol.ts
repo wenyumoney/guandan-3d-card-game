@@ -40,7 +40,7 @@ export type ClientMessage =
 // ── Server → Client ──
 export type ServerMessage =
   | { type: 'room_created'; roomCode: string; playerId: string }
-  | { type: 'room_joined'; roomCode: string; playerId: string; players: PlayerInfo[]; seats: (string | null)[] }
+  | { type: 'room_joined'; roomCode: string; playerId: string; players: PlayerInfo[]; seats: (string | null)[]; isMidGame?: boolean; availableSeats?: number[] }
   | { type: 'room_update'; players: PlayerInfo[]; seats: (string | null)[] }
   | { type: 'game_start'; seed: number; level: NormalRank; matchLevels: [NormalRank, NormalRank]; banker: 0 | 1; hand: CardExport[]; localSeat: Seat; seatPlayers: (SeatPlayer | null)[] }
   | { type: 'turn_notify'; seat: Seat; table: Combo | null }

@@ -165,7 +165,7 @@ export class RoomManager {
   }
 
   joinRoom(code: string, playerName: string, ws: WebSocket): {
-    ok: boolean; error?: string; playerId?: string; players?: PlayerInfo[]; seats?: (string | null)[]; isMidGame?: boolean; assignedSeat?: number
+    ok: boolean; error?: string; playerId?: string; players?: PlayerInfo[]; seats?: (string | null)[]; isMidGame?: boolean; availableSeats?: number[]
   } {
     const room = this.rooms.get(code)
     if (!room) return { ok: false, error: '房间不存在' }
@@ -179,28 +179,23 @@ export class RoomManager {
       return { ok: true, playerId: pid, players: this.playerList(room), seats: room.seats, isMidGame: false }
     }
 
-    // playing/settle 阶段：断线重连或中途加入（需要有 AI 空座）
+    // playing/settle 阶段：断线重连或中途加入 → 返回可选 AI 座位，让玩家自己选
     const coord = room.coordinator
     if (!coord) return { ok: false, error: '游戏状态异常' }
 
-    // 先检查是否已有同名玩家断线重连（同一个 ws 可能不同，按名字匹配）
-    // 查找空座（AI 座位）
-    let assignedSeat: number | null = null
+    // 收集所有 AI 空座（玩家断线后座位变 null，或原本就是 AI）
+    const availableSeats: number[] = []
     for (let s = 0; s < 4; s++) {
-      if (coord.seatPlayers[s] === null) {
-        assignedSeat = s
-        break
-      }
+      if (coord.seatPlayers[s] === null) availableSeats.push(s)
     }
-    if (assignedSeat === null) return { ok: false, error: '房间已满，没有空位' }
+    if (availableSeats.length === 0) return { ok: false, error: '房间已满，没有空位' }
 
+    // 加入但不分配座位 — 等客户端发 select_seat
     const pid = uid()
-    const conn: PlayerConn = { id: pid, name: playerName, seat: assignedSeat as Seat, ws }
+    const conn: PlayerConn = { id: pid, name: playerName, seat: null, ws }
     room.players.set(pid, conn)
-    room.seats[assignedSeat] = pid
-    coord.seatPlayers[assignedSeat] = pid
-    console.log(`[房间] ${code} ${playerName} 重连加入 → 座${assignedSeat} (${room.players.size}/4)`)
-    return { ok: true, playerId: pid, players: this.playerList(room), seats: room.seats, isMidGame: true, assignedSeat }
+    console.log(`[房间] ${code} ${playerName} 重连加入，可选座位: [${availableSeats}] (${room.players.size}/4)`)
+    return { ok: true, playerId: pid, players: this.playerList(room), seats: room.seats, isMidGame: true, availableSeats }
   }
 
   leaveRoom(code: string, playerId: string, ws: WebSocket): void {
@@ -226,20 +221,43 @@ export class RoomManager {
     }
   }
 
-  selectSeat(code: string, playerId: string, seat: Seat): { ok: boolean; error?: string } {
+  selectSeat(code: string, playerId: string, seat: Seat): { ok: boolean; error?: string; syncData?: Record<string, unknown> } {
     const room = this.rooms.get(code)
     if (!room) return { ok: false, error: '房间不存在' }
-    if (room.phase !== 'lobby') return { ok: false, error: '游戏已开始' }
-    const p = room.players.get(playerId)
-    if (!p) return { ok: false, error: '玩家不在房间' }
-    if (room.seats[seat] !== null) return { ok: false, error: '该座位已被占用' }
 
-    // 释放旧座位
-    if (p.seat !== null) room.seats[p.seat] = null
-    p.seat = seat
-    room.seats[seat] = playerId
-    console.log(`[房间] ${code} ${p.name} → 座${seat}`)
-    return { ok: true }
+    // lobby 阶段不允许选已占座位
+    if (room.phase === 'lobby') {
+      const p = room.players.get(playerId)
+      if (!p) return { ok: false, error: '玩家不在房间' }
+      if (room.seats[seat] !== null) return { ok: false, error: '该座位已被占用' }
+      if (p.seat !== null) room.seats[p.seat] = null
+      p.seat = seat
+      room.seats[seat] = playerId
+      console.log(`[房间] ${code} ${p.name} → 座${seat}`)
+      return { ok: true }
+    }
+
+    // playing 阶段：断线重连选座（仅可选 AI 空座）
+    if (room.phase === 'playing') {
+      const coord = room.coordinator
+      if (!coord) return { ok: false, error: '游戏状态异常' }
+      const p = room.players.get(playerId)
+      if (!p) return { ok: false, error: '玩家不在房间' }
+      if (p.seat !== null) return { ok: false, error: '你已有座位' }
+      if (coord.seatPlayers[seat] !== null) return { ok: false, error: '该座位已被真人占据' }
+
+      // 接管此 AI 座位
+      room.seats[seat] = playerId
+      coord.seatPlayers[seat] = playerId
+      p.seat = seat
+      console.log(`[房间] ${code} ${p.name} 重连接管 → 座${seat}`)
+
+      // 返回游戏同步数据
+      const syncData = this.getGameSyncData(code, playerId)
+      return { ok: true, syncData: syncData ?? undefined }
+    }
+
+    return { ok: false, error: '当前阶段不能选座' }
   }
 
   startGame(code: string, playerId: string): {

@@ -304,6 +304,8 @@ canvas { display: block; touch-action: manipulation; }
 #lobby .seat-slot:hover { border-color: var(--gold-hi); background: rgba(201,165,92,.1); }
 #lobby .seat-slot.occupied { border-style: solid; border-color: var(--teal); background: rgba(33,56,74,.35); }
 #lobby .seat-slot.occupied.mine { border-color: var(--gold-hi); background: rgba(122,34,48,.35); }
+#lobby .seat-slot:disabled { cursor: not-allowed; opacity: .4; }
+#lobby .seat-slot:disabled:hover { border-color: var(--gold-lo); background: transparent; }
 #lobby .seat-slot .seat-dir { font-size: 18px; font-weight: 700; color: var(--gold); }
 #lobby .seat-slot .seat-name { font-size: 13px; margin-top: 2px; color: var(--ink); }
 #lobby .seat-slot:not(.occupied) .seat-name { color: rgba(244,236,216,.35); }  /* AI 灰色 */

@@ -20,6 +20,8 @@ export function createLobby(root: HTMLElement, opts: LobbyOpts): void {
   const transport = new ClientTransport(opts.serverUrl)
   let playerId: string | null = null
   let roomCode: string | null = null
+  let isMidGame = false
+  let availableSeats: number[] = []
 
   const el = document.createElement('div')
   el.id = 'lobby'
@@ -97,15 +99,29 @@ export function createLobby(root: HTMLElement, opts: LobbyOpts): void {
       case 'room_joined': {
         playerId = msg.playerId
         roomCode = msg.roomCode
+        isMidGame = !!msg.isMidGame
+        availableSeats = msg.availableSeats ?? []
         showRoom()
         $roomCodeDisplay.textContent = roomCode
-        updateSeatDisplay(msg.players)
-        updateStartButton(msg.players)
+        if (isMidGame) {
+          // 中局重连 → 显示可选座位，隐藏开始按钮
+          $btnStart.style.display = 'none'
+          $roomStatus.textContent = '选择你要接管的座位'
+          updateSeatDisplay(msg.players, availableSeats)
+        } else {
+          $btnStart.style.display = ''
+          updateSeatDisplay(msg.players)
+          updateStartButton(msg.players)
+        }
         break
       }
       case 'room_update': {
-        updateSeatDisplay(msg.players)
-        updateStartButton(msg.players)
+        if (isMidGame) {
+          updateSeatDisplay(msg.players, availableSeats)
+        } else {
+          updateSeatDisplay(msg.players)
+          updateStartButton(msg.players)
+        }
         break
       }
       case 'game_start': {
@@ -212,13 +228,14 @@ export function createLobby(root: HTMLElement, opts: LobbyOpts): void {
     ;($room as HTMLElement).style.display = ''
   }
 
-  function updateSeatDisplay(players: PlayerInfo[]): void {
+  function updateSeatDisplay(players: PlayerInfo[], midGameAvailable?: number[]): void {
     // 清空（默认显示 AI）
     for (let s = 0; s < 4; s++) {
       const nameEl = el.querySelector(`#seat-name-${s}`)!
       const btn = el.querySelector(`#seat-${s}`)! as HTMLButtonElement
       nameEl.textContent = 'AI'
       btn.classList.remove('occupied', 'mine')
+      btn.disabled = false
     }
     // 填充已选座位
     for (const p of players) {
@@ -228,6 +245,15 @@ export function createLobby(root: HTMLElement, opts: LobbyOpts): void {
       nameEl.textContent = p.name
       btn.classList.add('occupied')
       if (p.id === playerId) btn.classList.add('mine')
+    }
+    // 中局重连模式：仅 availableSeats 中的座位可点击
+    if (midGameAvailable) {
+      for (let s = 0; s < 4; s++) {
+        const btn = el.querySelector(`#seat-${s}`)! as HTMLButtonElement
+        if (!midGameAvailable.includes(s)) {
+          btn.disabled = true
+        }
+      }
     }
     // 更新玩家列表
     $playerList.innerHTML = players.map((p) =>

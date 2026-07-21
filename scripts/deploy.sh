@@ -89,6 +89,7 @@ REMOTE
       cd $DEPLOY_DIR
 
       echo "▶ 解压..."
+      rm -rf dist/  # 清理旧版本文件避免堆积
       tar xzf $TAR --overwrite
       rm -f $TAR
 

@@ -87,8 +87,8 @@ wss.on('connection', (ws: WebSocket) => {
         if (!result.ok) { send(ws, { type: 'error', message: result.error! }); return }
         playerId = result.playerId!; roomCode = msg.roomCode as string
         if (result.isMidGame) {
-          const sync = rooms.getGameSyncData(roomCode, playerId)
-          if (sync) send(ws, { type: 'game_sync', ...sync })
+          // 中局重连：返回可选座位，等玩家选座后再发 game_sync
+          send(ws, { type: 'room_joined', roomCode: roomCode!, playerId: playerId!, players: result.players!, seats: result.seats!, isMidGame: true, availableSeats: result.availableSeats! })
           broadcastRoomUpdate(roomCode!)
         } else {
           send(ws, { type: 'room_joined', roomCode: roomCode!, playerId: playerId!, players: result.players!, seats: result.seats! })
@@ -101,6 +101,10 @@ wss.on('connection', (ws: WebSocket) => {
         if (!roomCode || !playerId) { send(ws, { type: 'error', message: '请先加入房间' }); return }
         const r = rooms.selectSeat(roomCode, playerId, msg.seat as Seat)
         if (!r.ok) { send(ws, { type: 'error', message: r.error! }); return }
+        if (r.syncData) {
+          // 中局重连选座 → 发送 game_sync 恢复游戏
+          send(ws, { type: 'game_sync', ...r.syncData })
+        }
         broadcastRoomUpdate(roomCode)
         break
       }
