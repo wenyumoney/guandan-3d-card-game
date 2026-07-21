@@ -224,11 +224,11 @@ export class RoomManager {
   selectSeat(code: string, playerId: string, seat: Seat): { ok: boolean; error?: string; syncData?: Record<string, unknown> } {
     const room = this.rooms.get(code)
     if (!room) return { ok: false, error: '房间不存在' }
+    const p = room.players.get(playerId)
+    if (!p) return { ok: false, error: '玩家不在房间' }
 
     // lobby 阶段不允许选已占座位
     if (room.phase === 'lobby') {
-      const p = room.players.get(playerId)
-      if (!p) return { ok: false, error: '玩家不在房间' }
       if (room.seats[seat] !== null) return { ok: false, error: '该座位已被占用' }
       if (p.seat !== null) room.seats[p.seat] = null
       p.seat = seat
@@ -241,8 +241,6 @@ export class RoomManager {
     if (room.phase === 'playing') {
       const coord = room.coordinator
       if (!coord) return { ok: false, error: '游戏状态异常' }
-      const p = room.players.get(playerId)
-      if (!p) return { ok: false, error: '玩家不在房间' }
       if (p.seat !== null) return { ok: false, error: '你已有座位' }
       if (coord.seatPlayers[seat] !== null) return { ok: false, error: '该座位已被真人占据' }
 

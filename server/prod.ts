@@ -86,14 +86,13 @@ wss.on('connection', (ws: WebSocket) => {
         const result = rooms.joinRoom(msg.roomCode as string, msg.playerName as string, ws)
         if (!result.ok) { send(ws, { type: 'error', message: result.error! }); return }
         playerId = result.playerId!; roomCode = msg.roomCode as string
+        const base = { type: 'room_joined' as const, roomCode: roomCode!, playerId: playerId!, players: result.players!, seats: result.seats! }
         if (result.isMidGame) {
-          // 中局重连：返回可选座位，等玩家选座后再发 game_sync
-          send(ws, { type: 'room_joined', roomCode: roomCode!, playerId: playerId!, players: result.players!, seats: result.seats!, isMidGame: true, availableSeats: result.availableSeats! })
-          broadcastRoomUpdate(roomCode!)
+          send(ws, { ...base, isMidGame: true, availableSeats: result.availableSeats! })
         } else {
-          send(ws, { type: 'room_joined', roomCode: roomCode!, playerId: playerId!, players: result.players!, seats: result.seats! })
-          broadcastRoomUpdate(roomCode!)
+          send(ws, base)
         }
+        broadcastRoomUpdate(roomCode!)
         break
       }
 
