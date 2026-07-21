@@ -68,7 +68,7 @@ export function createRenderer(container: HTMLElement): RenderContext {
   composer.addPass(bloom)
   composer.addPass(new OutputPass())
 
-  let quality: Quality = (window.innerWidth < 768) ? 'medium' : 'high'
+  let quality: Quality = 'medium'
   const applyDpr = (): void => renderer.setPixelRatio(Math.min(window.devicePixelRatio, DPR_CAP[quality]))
   applyDpr()
 
