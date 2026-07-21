@@ -96,6 +96,10 @@ const startOnline = (): void => {
       autoJoinRoom = undefined
       new OnlineSession(transport, { table, hand, hud, render, effects, audio }, msg)
     },
+    onJoinGame: (transport: ClientTransport, msg: ServerMessage & { type: 'game_sync' }) => {
+      autoJoinRoom = undefined
+      new OnlineSession(transport, { table, hand, hud, render, effects, audio }, msg)
+    },
     onBack: () => {
       autoJoinRoom = undefined
       createMenu(app, {

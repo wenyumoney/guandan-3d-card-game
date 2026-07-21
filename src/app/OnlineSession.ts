@@ -5,7 +5,7 @@ import { type Seat, teamOf } from '../core/deal'
 import { getCombos, beats, isBomb, bombTier, type Combo } from '../core/combos'
 import { generateMoves, generateBeating, playableCardIds, type Move } from '../core/moves'
 import { type ClientTransport } from '../net/ClientTransport'
-import type { ServerMessage, PlayerAction } from '../net/protocol'
+import type { ServerMessage, PlayerAction, SeatPlayer } from '../net/protocol'
 import { type TableView } from '../render/Table'
 import { type HandView } from '../render/HandView'
 import { type RenderContext } from '../render/Renderer'
@@ -63,8 +63,8 @@ export interface OnlineSessionDeps {
 export class OnlineSession {
   private transport: ClientTransport
   private deps: OnlineSessionDeps
-  private localSeat: Seat
-  private level: NormalRank
+  private localSeat!: Seat
+  private level!: NormalRank
   private hand: Card[] = []
   private handCounts: number[] = [27, 27, 27, 27]
   private table: Combo | null = null
@@ -77,31 +77,30 @@ export class OnlineSession {
   private seatNames: string[] = [...SEAT_NAMES]
   private unsub: (() => void) | null = null
 
-  constructor(transport: ClientTransport, deps: OnlineSessionDeps, msg: ServerMessage & { type: 'game_start' }) {
+  constructor(transport: ClientTransport, deps: OnlineSessionDeps, msg: ServerMessage & ({ type: 'game_start' } | { type: 'game_sync' })) {
     this.transport = transport
     this.deps = deps
+
+    if (msg.type === 'game_sync') {
+      this.initFromSync(msg as ServerMessage & { type: 'game_sync' })
+    } else {
+      this.initFromStart(msg as ServerMessage & { type: 'game_start' })
+    }
+  }
+
+  private initCommon(msg: { localSeat: Seat; level: NormalRank; matchLevels: [NormalRank, NormalRank]; banker: 0 | 1; hand: Array<{ id: string; suit: string; rank: string }>; seatPlayers: (SeatPlayer | null)[] }): void {
     this.localSeat = msg.localSeat
     this.level = msg.level
 
-    // 初始化座位名称
     for (let s = 0; s < 4; s++) {
       const sp = msg.seatPlayers[s]
       if (sp) this.seatNames[s] = sp.name
     }
 
-    // 显示自己的手牌
     this.hand = msg.hand.map((c) => ({ id: c.id, suit: c.suit as Card['suit'], rank: c.rank as Card['rank'] }))
     this.deps.hand.setHand(this.hand, this.level, true)
 
-    // 显示手牌数
-    for (let s = 0; s < 4; s++) {
-      const sp = msg.seatPlayers[s]
-      this.handCounts[s] = sp ? sp.cardCount : 27
-    }
-    this.deps.hud.setCounts(this.handCounts, -1)
     this.deps.hud.setLevels(msg.matchLevels[0], msg.matchLevels[1], msg.banker)
-    this.deps.hud.setTurn('等待…')
-    this.deps.hud.setControls({ canPlay: false, canPass: false, canHint: false })
     this.deps.hud.message(`联机对战 · 你是 ${this.seatNames[this.localSeat]} (${SEAT_NAMES[this.localSeat]})`)
 
     // 注册按钮回调
@@ -129,10 +128,59 @@ export class OnlineSession {
     window.addEventListener('keydown', onKey)
 
     // 监听服务端消息
-    this.unsub = transport.onMessage((m: ServerMessage) => this.handleServerMsg(m))
+    this.unsub = this.transport.onMessage((m: ServerMessage) => this.handleServerMsg(m))
+  }
 
-    // 第一条 turn_notify 告诉谁先出
+  private initFromStart(msg: ServerMessage & { type: 'game_start' }): void {
+    this.initCommon(msg)
+
+    for (let s = 0; s < 4; s++) {
+      const sp = msg.seatPlayers[s]
+      this.handCounts[s] = sp ? sp.cardCount : 27
+    }
+    this.deps.hud.setCounts(this.handCounts, -1)
+    this.deps.hud.setTurn('等待…')
+    this.deps.hud.setControls({ canPlay: false, canPass: false, canHint: false })
     this.deps.table.dealFlourish()
+    this.deps.audio.play()
+  }
+
+  private initFromSync(msg: ServerMessage & { type: 'game_sync' }): void {
+    this.initCommon(msg)
+
+    this.handCounts = [...msg.handCounts]
+    this.finished = [...msg.finished]
+    this.current = msg.currentTurn
+    this.table = msg.table
+
+    // 恢复桌面：重放当前墩的出牌历史
+    this.deps.table.clearAllPlays()
+    for (const tp of msg.trickPlays) {
+      const cards = tp.cardIds.map(cardFromId)
+      this.deps.table.showPlay(cards as Card[], tp.seat)
+      const text = comboText(tp.combo, this.level)
+      if (this.trickLog.length === 0) {
+        this.trickLog.push({ seat: tp.seat, text, isLead: true })
+      } else {
+        // 服务端 trickPlays 按顺序排列，只有第一条是领牌
+        this.trickLog.push({ seat: tp.seat, text, isLead: false })
+      }
+    }
+    this.deps.hud.setTrickLog(this.trickLog)
+    this.deps.hud.setCounts(this.handCounts, msg.currentTurn)
+    this.deps.hud.setControls({ canPlay: false, canPass: false, canHint: false })
+
+    if (this.finished.includes(this.localSeat)) {
+      this.deps.hud.setTurn('你已完成')
+      this.deps.hud.setControls({ canPlay: false, canPass: false, canHint: false })
+    } else if (msg.currentTurn === this.localSeat) {
+      this.onMyTurn()
+    } else {
+      this.deps.hud.setTurn(`${this.seatNames[msg.currentTurn]} 思考中…`)
+      this.deps.hand.setPlayable(new Set())
+    }
+
+    this.deps.hud.message(`已恢复联机 · 你是 ${this.seatNames[this.localSeat]} (${SEAT_NAMES[this.localSeat]})`)
     this.deps.audio.play()
   }
 
@@ -230,6 +278,45 @@ export class OnlineSession {
 
       case 'error': {
         this.deps.hud.message(`❌ ${msg.message}`)
+        break
+      }
+
+      case 'game_sync': {
+        // 游戏中重连：不重注册回调，仅同步状态
+        this.localSeat = msg.localSeat
+        this.level = msg.level
+        this.hand = msg.hand.map((c) => ({ id: c.id, suit: c.suit as Card['suit'], rank: c.rank as Card['rank'] }))
+        this.handCounts = [...msg.handCounts]
+        this.finished = [...msg.finished]
+        this.current = msg.currentTurn
+        this.table = msg.table
+        this.trickLog = []
+        for (let s = 0; s < 4; s++) {
+          const sp = msg.seatPlayers[s]
+          if (sp) this.seatNames[s] = sp.name
+        }
+        this.deps.hand.setHand(this.hand, this.level, true)
+        this.deps.hud.setLevels(msg.matchLevels[0], msg.matchLevels[1], msg.banker)
+        // 恢复桌面
+        this.deps.table.clearAllPlays()
+        for (const tp of msg.trickPlays) {
+          const cards = tp.cardIds.map(cardFromId)
+          this.deps.table.showPlay(cards as Card[], tp.seat)
+          this.trickLog.push({ seat: tp.seat, text: comboText(tp.combo, this.level), isLead: this.trickLog.length === 0 })
+        }
+        this.deps.hud.setTrickLog(this.trickLog)
+        this.deps.hud.setCounts(this.handCounts, msg.currentTurn)
+        if (this.finished.includes(this.localSeat)) {
+          this.deps.hud.setTurn('你已完成')
+          this.deps.hud.setControls({ canPlay: false, canPass: false, canHint: false })
+        } else if (this.current === this.localSeat) {
+          this.onMyTurn()
+        } else {
+          this.deps.hud.setTurn(`${this.seatNames[this.current]} 思考中…`)
+          this.deps.hand.setPlayable(new Set())
+          this.deps.hud.setControls({ canPlay: false, canPass: false, canHint: false })
+        }
+        this.deps.hud.message('已恢复联机')
         break
       }
 

@@ -8,6 +8,7 @@ import { join, extname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { WebSocketServer, WebSocket } from 'ws'
 import { RoomManager } from './room.js'
+import type { Seat } from '../src/core/deal.js'
 
 const PORT = parseInt(process.env.PORT ?? '80', 10)
 const DIST = join(fileURLToPath(import.meta.url), '../../dist')
@@ -85,14 +86,20 @@ wss.on('connection', (ws: WebSocket) => {
         const result = rooms.joinRoom(msg.roomCode as string, msg.playerName as string, ws)
         if (!result.ok) { send(ws, { type: 'error', message: result.error! }); return }
         playerId = result.playerId!; roomCode = msg.roomCode as string
-        send(ws, { type: 'room_joined', roomCode: roomCode!, playerId: playerId!, players: result.players!, seats: result.seats! })
-        broadcastRoomUpdate(roomCode!)
+        if (result.isMidGame) {
+          const sync = rooms.getGameSyncData(roomCode, playerId)
+          if (sync) send(ws, { type: 'game_sync', ...sync })
+          broadcastRoomUpdate(roomCode!)
+        } else {
+          send(ws, { type: 'room_joined', roomCode: roomCode!, playerId: playerId!, players: result.players!, seats: result.seats! })
+          broadcastRoomUpdate(roomCode!)
+        }
         break
       }
 
       case 'select_seat': {
         if (!roomCode || !playerId) { send(ws, { type: 'error', message: '请先加入房间' }); return }
-        const r = rooms.selectSeat(roomCode, playerId, msg.seat as number)
+        const r = rooms.selectSeat(roomCode, playerId, msg.seat as Seat)
         if (!r.ok) { send(ws, { type: 'error', message: r.error! }); return }
         broadcastRoomUpdate(roomCode)
         break
@@ -107,7 +114,7 @@ wss.on('connection', (ws: WebSocket) => {
           if (c) send(c, { type: 'game_start', ...sm })
         }
         if (r.firstTurn) broadcastToRoom(roomCode, r.firstTurn)
-        if (r.firstAiSeat != null) rooms.scheduleAiTurn(roomCode, r.firstAiSeat)
+        if (r.firstAiSeat != null) rooms.scheduleAiTurn(roomCode, r.firstAiSeat as Seat)
         break
       }
 
@@ -117,7 +124,7 @@ wss.on('connection', (ws: WebSocket) => {
         if (!r.ok) { send(ws, { type: 'error', message: r.error! }); return }
         if (r.broadcast) for (const bm of r.broadcast) broadcastToRoom(roomCode, bm)
         if (r.turnNotify) broadcastToRoom(roomCode, r.turnNotify)
-        if (r.nextAiSeat != null) rooms.scheduleAiTurn(roomCode, r.nextAiSeat)
+        if (r.nextAiSeat != null) rooms.scheduleAiTurn(roomCode, r.nextAiSeat as Seat)
         break
       }
 

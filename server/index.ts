@@ -4,6 +4,7 @@
 
 import { WebSocketServer, WebSocket } from 'ws'
 import { RoomManager } from './room'
+import type { Seat } from '../src/core/deal'
 
 const PORT = parseInt(process.env.PORT ?? '8787', 10)
 
@@ -73,21 +74,27 @@ wss.on('connection', (ws: WebSocket) => {
         if (!result.ok) { send(ws, { type: 'error', message: result.error! }); return }
         playerId = result.playerId!
         roomCode = msg.roomCode as string
-        send(ws, {
-          type: 'room_joined',
-          roomCode: roomCode!,
-          playerId: playerId!,
-          players: result.players!,
-          seats: result.seats!,
-        })
-        // 广播房间更新给其他人
-        broadcastRoom(roomCode!)
+        if (result.isMidGame) {
+          // 中途加入/重连 → 发送完整游戏状态
+          const sync = rooms.getGameSyncData(roomCode, playerId)
+          if (sync) send(ws, { type: 'game_sync', ...sync })
+          broadcastRoom(roomCode!)
+        } else {
+          send(ws, {
+            type: 'room_joined',
+            roomCode: roomCode!,
+            playerId: playerId!,
+            players: result.players!,
+            seats: result.seats!,
+          })
+          broadcastRoom(roomCode!)
+        }
         break
       }
 
       case 'select_seat': {
         if (!roomCode || !playerId) { send(ws, { type: 'error', message: '请先加入房间' }); return }
-        const r = rooms.selectSeat(roomCode, playerId, msg.seat as number)
+        const r = rooms.selectSeat(roomCode, playerId, msg.seat as Seat)
         if (!r.ok) { send(ws, { type: 'error', message: r.error! }); return }
         broadcastRoom(roomCode)
         break
@@ -106,7 +113,7 @@ wss.on('connection', (ws: WebSocket) => {
         if (r.firstTurn) broadcastToRoom(roomCode, r.firstTurn)
         // 如果第一个是 AI，触发 AI 决策
         if (r.firstAiSeat !== null && r.firstAiSeat !== undefined) {
-          rooms.scheduleAiTurn(roomCode, r.firstAiSeat)
+          rooms.scheduleAiTurn(roomCode, r.firstAiSeat as Seat)
         }
         break
       }
@@ -122,7 +129,7 @@ wss.on('connection', (ws: WebSocket) => {
         if (r.turnNotify) broadcastToRoom(roomCode, r.turnNotify)
         // 如果下一个是 AI，触发 AI 决策
         if (r.nextAiSeat !== undefined && r.nextAiSeat !== null) {
-          rooms.scheduleAiTurn(roomCode, r.nextAiSeat)
+          rooms.scheduleAiTurn(roomCode, r.nextAiSeat as Seat)
         }
         break
       }

@@ -68,7 +68,7 @@ export function createRenderer(container: HTMLElement): RenderContext {
   composer.addPass(bloom)
   composer.addPass(new OutputPass())
 
-  let quality: Quality = 'high'
+  let quality: Quality = (window.innerWidth < 768) ? 'medium' : 'high'
   const applyDpr = (): void => renderer.setPixelRatio(Math.min(window.devicePixelRatio, DPR_CAP[quality]))
   applyDpr()
 
@@ -79,6 +79,14 @@ export function createRenderer(container: HTMLElement): RenderContext {
     composer.setSize(w, h)
     bloom.setSize(w, h)
     camera.aspect = w / h
+    // 窄屏自动提升 FOV
+    if (w / h < 1.2) {
+      camera.fov = 62
+    } else if (w / h < 1.5) {
+      camera.fov = 54
+    } else {
+      camera.fov = 46
+    }
     camera.updateProjectionMatrix()
   }
   window.addEventListener('resize', onResize)
@@ -114,9 +122,10 @@ export function createRenderer(container: HTMLElement): RenderContext {
         basePos.y + (Math.random() * 2 - 1) * k,
         basePos.z + (Math.random() * 2 - 1) * k,
       )
-    } else if (!camera.position.equals(basePos)) {
+    } else if (camera.position.distanceToSquared(basePos) > 0.001) {
       camera.position.copy(basePos)
     }
+    // 始终渲染（不在条件分支中，避免移动端浮点精度导致永不渲染）
     if (quality === 'high') composer.render()
     else renderer.render(scene, camera)
     raf = requestAnimationFrame(tick)

@@ -1,6 +1,6 @@
 // 房间管理器：房间增删查、选座、游戏开始、行动校验、AI 调度。
 
-import type { WebSocket } from 'ws'
+import { WebSocket } from 'ws'
 import { deal, teamOf, type Seat } from '../src/core/deal'
 import { createRound, play, pass, type RoundState } from '../src/core/round'
 import { initMatch, applyRoundResult, computeTribute, levelGain, type MatchState, type TributeResult } from '../src/core/scoring'
@@ -61,6 +61,8 @@ class GameCoordinator {
   phase: 'play' | 'tribute_give' | 'tribute_return' = 'play'
   /** 座位→玩家id映射（null=AI） */
   seatPlayers: (string | null)[]
+  /** 当前墩的出牌历史（用于断线重连恢复桌面状态）。leader 在清桌时重置。 */
+  trickPlays: Array<{ seat: Seat; cardIds: string[]; combo: Combo }> = []
 
   constructor(hands: Array<Array<{ id: string; suit: string; rank: string }>>, level: NormalRank, seed: number, match: MatchState, seatPlayers: (string | null)[]) {
     this.level = level
@@ -112,6 +114,11 @@ class GameCoordinator {
       if (cards.length !== action.cardIds.length) {
         return { ok: false, error: '牌不在手牌中' }
       }
+      // 新一墩领牌 → 清桌面历史
+      if (this.round.table === null) {
+        this.trickPlays = []
+      }
+      this.trickPlays.push({ seat: action.seat, cardIds: action.cardIds, combo: action.combo })
       const r = play(this.round, action.seat, cards, action.combo)
       return { ok: r.ok, error: r.reason }
     }
@@ -158,22 +165,42 @@ export class RoomManager {
   }
 
   joinRoom(code: string, playerName: string, ws: WebSocket): {
-    ok: boolean; error?: string; playerId?: string; players?: PlayerInfo[]; seats?: (string | null)[]
+    ok: boolean; error?: string; playerId?: string; players?: PlayerInfo[]; seats?: (string | null)[]; isMidGame?: boolean; assignedSeat?: number
   } {
     const room = this.rooms.get(code)
     if (!room) return { ok: false, error: '房间不存在' }
-    if (room.phase !== 'lobby') return { ok: false, error: '游戏已开始，无法加入' }
-    if (room.players.size >= 4) return { ok: false, error: '房间已满（最多4人）' }
+
+    // lobby 阶段：正常加入（最多4人）
+    if (room.phase === 'lobby') {
+      if (room.players.size >= 4) return { ok: false, error: '房间已满（最多4人）' }
+      const pid = uid()
+      room.players.set(pid, { id: pid, name: playerName, seat: null, ws })
+      console.log(`[房间] ${code} ${playerName} 加入 (${room.players.size}/4)`)
+      return { ok: true, playerId: pid, players: this.playerList(room), seats: room.seats, isMidGame: false }
+    }
+
+    // playing/settle 阶段：断线重连或中途加入（需要有 AI 空座）
+    const coord = room.coordinator
+    if (!coord) return { ok: false, error: '游戏状态异常' }
+
+    // 先检查是否已有同名玩家断线重连（同一个 ws 可能不同，按名字匹配）
+    // 查找空座（AI 座位）
+    let assignedSeat: number | null = null
+    for (let s = 0; s < 4; s++) {
+      if (coord.seatPlayers[s] === null) {
+        assignedSeat = s
+        break
+      }
+    }
+    if (assignedSeat === null) return { ok: false, error: '房间已满，没有空位' }
 
     const pid = uid()
-    room.players.set(pid, { id: pid, name: playerName, seat: null, ws })
-    console.log(`[房间] ${code} ${playerName} 加入 (${room.players.size}/4)`)
-    return {
-      ok: true,
-      playerId: pid,
-      players: this.playerList(room),
-      seats: room.seats,
-    }
+    const conn: PlayerConn = { id: pid, name: playerName, seat: assignedSeat as Seat, ws }
+    room.players.set(pid, conn)
+    room.seats[assignedSeat] = pid
+    coord.seatPlayers[assignedSeat] = pid
+    console.log(`[房间] ${code} ${playerName} 重连加入 → 座${assignedSeat} (${room.players.size}/4)`)
+    return { ok: true, playerId: pid, players: this.playerList(room), seats: room.seats, isMidGame: true, assignedSeat }
   }
 
   leaveRoom(code: string, playerId: string, ws: WebSocket): void {
@@ -182,11 +209,17 @@ export class RoomManager {
     const p = room.players.get(playerId)
     if (!p) return
     // 释放座位
-    if (p.seat !== null) room.seats[p.seat] = null
+    if (p.seat !== null) {
+      room.seats[p.seat] = null
+      // 同步更新 coordinator 的 seatPlayers（若游戏进行中）
+      if (room.coordinator) {
+        room.coordinator.seatPlayers[p.seat] = null
+      }
+    }
     room.players.delete(playerId)
     console.log(`[房间] ${code} ${p.name} 离开 (${room.players.size}/4)`)
-    // 房间空则删除
-    if (room.players.size === 0) {
+    // lobby 阶段无玩家则删除；playing/settle 保留（AI 接管或等待重连）
+    if (room.players.size === 0 && room.phase === 'lobby') {
       this.cleanupRoom(room)
       this.rooms.delete(code)
       console.log(`[房间] ${code} 已删除`)
@@ -226,8 +259,9 @@ export class RoomManager {
     // 自动就座：未选座的真人自动分配空座
     const unseated = [...room.players.values()].filter((p) => p.seat === null)
     for (const p of unseated) {
-      const empty = (room.seats.findIndex((s, i) => s === null && !room.seats[i])) as Seat
-      if (empty !== -1) {
+      const emptyIdx = room.seats.findIndex((s, i) => s === null && !room.seats[i])
+      if (emptyIdx !== -1) {
+        const empty = emptyIdx as Seat
         p.seat = empty
         room.seats[empty] = p.id
       }
@@ -249,7 +283,7 @@ export class RoomManager {
     room.phase = 'playing'
 
     // 构造给每个真人玩家的 game_start 消息（只含自己的手牌）
-    const startMessages: Array<{ playerId: string; seed: number; level: string; hand: Array<{ id: string; suit: string; rank: string }>; localSeat: number; seatPlayers: Array<{ playerId: string; name: string; cardCount: number } | null> }> = []
+    const startMessages: Array<{ playerId: string; seed: number; level: string; matchLevels: [string, string]; banker: number; hand: Array<{ id: string; suit: string; rank: string }>; localSeat: number; seatPlayers: Array<{ playerId: string; name: string; cardCount: number } | null> }> = []
     for (const [pid, conn] of room.players) {
       const seat = conn.seat!
       const handCards = hands[seat].map((c) => ({ id: c.id, suit: c.suit, rank: c.rank }))
@@ -290,7 +324,7 @@ export class RoomManager {
     if (!r.ok) return { ok: false, error: r.error }
 
     // 广播给所有客户端
-    const broadcast = [{ type: 'action_broadcast', action }]
+    const broadcast: Array<Record<string, unknown>> = [{ type: 'action_broadcast', action }]
 
     // 推进回合
     const round = coord.round
@@ -302,6 +336,7 @@ export class RoomManager {
       // 结算
       const finished = round.finished
       coord.match = applyRoundResult(coord.match, finished)
+      coord.level = coord.match.levels[coord.match.banker] // 同步级别
       coord.lastFinished = [...finished]
       const winT = teamOf(finished[0])
       const losers = finished.filter((s) => teamOf(s) !== winT)
@@ -362,6 +397,7 @@ export class RoomManager {
       if (round.over) {
         const finished = round.finished
         coord.match = applyRoundResult(coord.match, finished)
+        coord.level = coord.match.levels[coord.match.banker]
         coord.lastFinished = [...finished]
         room.phase = 'settle'
         for (const [, conn] of room.players) {
@@ -440,12 +476,10 @@ export class RoomManager {
     const firstSeat = trib && !trib.kang ? biggestPayer(trib.transfers) : (lastFinished?.[0] ?? 0)
 
     // 创建新协调器
-    const newCoord = new GameCoordinator(hands, coord.level, newSeed, coord.match, coord.seatPlayers)
+    const newLevel = coord.match.levels[coord.match.banker]
+    const newCoord = new GameCoordinator(hands, newLevel, newSeed, coord.match, coord.seatPlayers)
     newCoord.lastFinished = lastFinished
-    // 设置先手
-    if (trib && !trib.kang) {
-      newCoord.round = createRound(hands as unknown as Array<Array<import('../src/core/cards').Card>>, coord.level, firstSeat)
-    }
+    newCoord.round = createRound(hands as unknown as Array<Array<import('../src/core/cards').Card>>, newLevel, firstSeat)
 
     room.coordinator = newCoord
     room.phase = 'playing'
@@ -484,6 +518,39 @@ export class RoomManager {
     }
   }
 
+  getGameSyncData(code: string, playerId: string): Record<string, unknown> | null {
+    const room = this.rooms.get(code)
+    if (!room || !room.coordinator) return null
+    const coord = room.coordinator
+    const p = room.players.get(playerId)
+    if (!p || p.seat === null) return null
+
+    const seat = p.seat
+    const handCards = coord.round.hands[seat].map((c) => ({ id: c.id, suit: c.suit, rank: c.rank }))
+    const sps: Array<{ playerId: string; name: string; cardCount: number } | null> = [0, 1, 2, 3].map((s) => {
+      const spId = coord.seatPlayers[s]
+      if (spId === null) return { playerId: '', name: `AI-${['南', '东', '北', '西'][s]}`, cardCount: coord.round.hands[s].length }
+      const spConn = room.players.get(spId)
+      return { playerId: spId, name: spConn?.name ?? '未知', cardCount: coord.round.hands[s].length }
+    })
+
+    return {
+      localSeat: seat,
+      level: coord.level,
+      matchLevels: coord.match.levels,
+      banker: coord.match.banker,
+      hand: handCards,
+      seatPlayers: sps,
+      currentTurn: coord.round.current,
+      table: coord.round.table,
+      handCounts: coord.round.hands.map((h) => h.length),
+      finished: coord.round.finished,
+      trickPlays: coord.trickPlays,
+      playerId,
+      roomCode: code,
+    }
+  }
+
   // ── 内部 ──
   private playerList(room: Room): PlayerInfo[] {
     return [...room.players.values()].map((p) => ({ id: p.id, name: p.name, seat: p.seat }))
@@ -513,7 +580,7 @@ export class RoomManager {
       }
       // 触发 AI
       if (r.firstAiSeat !== null && r.firstAiSeat !== undefined) {
-        this.scheduleAiTurn(code, r.firstAiSeat)
+        this.scheduleAiTurn(code, r.firstAiSeat as Seat)
       }
     }, 5000)
   }

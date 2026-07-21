@@ -12,6 +12,7 @@ export interface LobbyOpts {
   playerName?: string  // 预填昵称
   autoJoinRoom?: string  // URL 参数 ?room=XXXX，自动加入
   onStart: (transport: ClientTransport, localSeat: Seat, msg: ServerMessage & { type: 'game_start' }) => void
+  onJoinGame: (transport: ClientTransport, msg: ServerMessage & { type: 'game_sync' }) => void
   onBack: () => void
 }
 
@@ -108,10 +109,28 @@ export function createLobby(root: HTMLElement, opts: LobbyOpts): void {
         break
       }
       case 'game_start': {
-        // 传给 onStart 回调，进入游戏
-        el.remove()
         unsub()
-        opts.onStart(transport, msg.localSeat, msg as ServerMessage & { type: 'game_start' })
+        try {
+          opts.onStart(transport, msg.localSeat, msg as ServerMessage & { type: 'game_start' })
+        } catch (e) {
+          console.error('OnlineSession init failed:', e)
+          setStatus('⚠️ 进入游戏失败，请刷新重试')
+          return
+        }
+        el.remove()
+        break
+      }
+      case 'game_sync': {
+        // 断线重连 / 中途加入 → 直接进入游戏恢复状态
+        unsub()
+        try {
+          opts.onJoinGame(transport, msg as ServerMessage & { type: 'game_sync' })
+        } catch (e) {
+          console.error('OnlineSession restore failed:', e)
+          setStatus('⚠️ 恢复游戏失败，请刷新重试')
+          return
+        }
+        el.remove()
         break
       }
       case 'error': {
@@ -125,7 +144,9 @@ export function createLobby(root: HTMLElement, opts: LobbyOpts): void {
   // ── 按钮事件 ──
   el.querySelector('#btn-create')!.addEventListener('click', () => {
     setStatus('连接服务器…')
+    transport.setPlayerName(nameInput())
     transport.connect().then(() => {
+      transport.enableVisibilityReconnect()
       transport.send({ type: 'create_room', playerName: nameInput() })
     }).catch(() => setStatus('❌ 无法连接服务器'))
   })
@@ -134,7 +155,9 @@ export function createLobby(root: HTMLElement, opts: LobbyOpts): void {
     const code = (el.querySelector('#join-code')! as HTMLInputElement).value.trim()
     if (!/^\d{4}$/.test(code)) { setStatus('请输入4位数字房间码'); return }
     setStatus('连接服务器…')
+    transport.setPlayerName(nameInput())
     transport.connect().then(() => {
+      transport.enableVisibilityReconnect()
       transport.send({ type: 'join_room', roomCode: code, playerName: nameInput() })
     }).catch(() => setStatus('❌ 无法连接服务器'))
   })
@@ -225,7 +248,9 @@ export function createLobby(root: HTMLElement, opts: LobbyOpts): void {
   // ── 自动加入（URL 参数 ?room=XXXX）──
   if (opts.autoJoinRoom) {
     setStatus('正在加入房间…')
+    transport.setPlayerName(nameInput())
     transport.connect().then(() => {
+      transport.enableVisibilityReconnect()
       transport.send({ type: 'join_room', roomCode: opts.autoJoinRoom!, playerName: nameInput() })
     }).catch(() => setStatus('❌ 无法连接服务器'))
   }

@@ -307,3 +307,100 @@ canvas { display: block; }
 #lobby .lobby-copy-btn.copied { border-color: var(--teal); color: var(--teal); background: rgba(33,56,74,.3); }
 #lobby .lobby-player-list { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-bottom: 12px; }
 #lobby .player-tag { padding: 3px 12px; border-radius: 12px; font-size: 13px; background: rgba(201,165,92,.15); color: var(--gold); }
+
+/* ══════════════════════════════════════════
+   移动端响应式
+   ══════════════════════════════════════════ */
+@media (max-width: 768px) {
+  /* 顶栏：缩小字号，允许横向滚动 */
+  #hud .topbar {
+    top: 6px; padding: 6px 10px; gap: 8px;
+    font-size: 11px; border-radius: 6px;
+    left: 8px; right: 8px; transform: none;
+    max-width: calc(100vw - 16px); overflow-x: auto;
+    white-space: nowrap;
+  }
+  #hud .topbar .brand {
+    font-size: 16px; letter-spacing: 1px; padding-right: 8px;
+  }
+  #hud .topbar .stat { font-size: 11px; }
+  #hud .topbar .stat b { font-size: 13px; }
+  #hud .topbar .sep { height: 14px; }
+  #hud .topbar #hud-turn { min-width: 64px; font-size: 11px; }
+  #hud .topbar .group button { padding: 3px 7px; font-size: 10px; }
+  #hud .topbar .mute { padding: 3px 6px; font-size: 13px; }
+
+  /* 座位铭牌：缩小 */
+  #hud .seat { padding: 2px 8px; font-size: 11px; border-radius: 6px; }
+
+  /* 控制按钮：确保触控尺寸 */
+  #hud button { padding: 12px 20px; font-size: 15px; min-height: 44px; }
+  #hud button.sort { padding: 10px 14px; }
+  #hud .controls { bottom: 12px; gap: 8px; }
+
+  /* 出牌记录：移动端默认隐藏 */
+  #hud .tricklog { display: none; }
+  #hud .tricklog.show-mobile { display: block; right: 4px; top: 56px; bottom: 100px; width: 160px; }
+  #hud .tricklog .tricklog-inner { font-size: 16px; }
+
+  /* 结算弹窗 */
+  #hud .banner .banner-scroll { padding: 16px 24px; font-size: 16px; }
+  #hud .banner .banner-scroll b { font-size: 18px; }
+
+  /* 消息 */
+  #hud .msg { bottom: 68px; font-size: 12px; }
+
+  /* 菜单：全宽 */
+  #menu .menu-card { padding: 24px 20px; border-radius: 10px; margin: 0 12px; }
+  #menu .menu-title { font-size: 42px; letter-spacing: 8px; }
+  #menu .menu-sub { font-size: 12px; letter-spacing: 2px; }
+  #menu .menu-start { padding: 14px 48px; font-size: 17px; letter-spacing: 4px; }
+  #menu .menu-diff { gap: 6px; }
+  #menu .menu-diff button { padding: 7px 12px; font-size: 12px; }
+  #menu .menu-help-card { max-width: 94vw; padding: 16px 20px; font-size: 13px; }
+  #menu .menu-help-card h2 { font-size: 20px; }
+  #menu .menu-help-card h3 { font-size: 14px; }
+
+  /* 大厅 */
+  #lobby .lobby-container { width: auto; max-width: 100vw; padding: 20px 16px; border-radius: 10px; }
+  #lobby .lobby-title { font-size: 22px; letter-spacing: 2px; }
+  #lobby .seat-grid {
+    grid-template-columns: repeat(3, min(80px, 22vw));
+    grid-template-rows: repeat(3, min(80px, 22vw));
+    gap: 8px;
+  }
+  #lobby .seat-slot { font-size: 11px; }
+  #lobby .seat-slot .seat-dir { font-size: 14px; }
+  #lobby .seat-slot .seat-name { font-size: 11px; }
+  #lobby .seat-slot .seat-desc { font-size: 9px; }
+  #lobby .lobby-btn { padding: 10px 16px; font-size: 14px; }
+  #lobby .lobby-join-row input { font-size: 14px; padding: 6px 8px; }
+}
+
+@media (max-width: 480px) {
+  #hud .topbar {
+    top: 3px; padding: 4px 6px; gap: 5px;
+    font-size: 10px; border-radius: 4px;
+  }
+  #hud .topbar .brand { font-size: 13px; padding-right: 5px; letter-spacing: 0; }
+  #hud .topbar .stat b { font-size: 11px; }
+  #hud .topbar .group button { padding: 2px 5px; font-size: 9px; }
+  #hud .topbar .mute { padding: 2px 4px; font-size: 11px; }
+
+  #hud button { padding: 10px 14px; font-size: 14px; min-height: 40px; }
+  #hud .controls { bottom: 8px; gap: 6px; }
+
+  #hud .seat { padding: 2px 6px; font-size: 10px; }
+
+  #menu .menu-card { padding: 16px 12px; }
+  #menu .menu-title { font-size: 32px; letter-spacing: 4px; }
+  #menu .menu-start { padding: 12px 36px; font-size: 15px; }
+
+  #lobby .seat-grid {
+    grid-template-columns: repeat(3, min(64px, 20vw));
+    grid-template-rows: repeat(3, min(64px, 20vw));
+    gap: 4px;
+  }
+  #lobby .seat-slot .seat-dir { font-size: 12px; }
+  #lobby .seat-slot .seat-name { font-size: 10px; }
+}

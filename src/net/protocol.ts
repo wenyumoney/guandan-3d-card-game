@@ -49,8 +49,14 @@ export type ServerMessage =
   | { type: 'error'; message: string }
   | { type: 'pong' }
   | { type: 'player_disconnected'; playerId: string; seat: Seat; name: string }
+  | { type: 'game_sync'; playerId: string; roomCode: string; localSeat: Seat; level: NormalRank; matchLevels: [NormalRank, NormalRank]; banker: 0 | 1; hand: CardExport[]; seatPlayers: (SeatPlayer | null)[]; currentTurn: Seat; table: Combo | null; handCounts: number[]; finished: Seat[]; trickPlays: TrickPlayExport[] }
 
 // ── Card 的序列化形式（Card.id 包含所有信息，但为清晰仍拆分） ──
+export interface TrickPlayExport {
+  seat: Seat
+  cardIds: string[]
+  combo: Combo
+}
 export interface CardExport {
   id: string
   suit: string
