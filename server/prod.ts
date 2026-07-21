@@ -10,7 +10,7 @@ import { WebSocketServer, WebSocket } from 'ws'
 import { RoomManager } from './room.js'
 import type { Seat } from '../src/core/deal.js'
 
-const PORT = parseInt(process.env.PORT ?? '80', 10)
+const PORT = parseInt(process.env.PORT ?? '8787', 10)
 const DIST = join(fileURLToPath(import.meta.url), '../../dist')
 
 const MIME: Record<string, string> = {

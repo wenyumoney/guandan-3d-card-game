@@ -96,7 +96,7 @@ REMOTE
       npm install --production --registry=https://registry.npmmirror.com
 
       echo "▶ 重启服务..."
-      export PORT=80
+      export PORT=8787
       pm2 delete $APP_NAME 2>/dev/null || true
       pm2 start npm --name $APP_NAME -- run start
       pm2 save
