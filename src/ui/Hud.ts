@@ -26,6 +26,7 @@ export interface HudApi {
   onSpeed(cb: (s: number) => void): void
   onSort(cb: () => void): void
   onClear(cb: () => void): void
+  setRoomCode(code: string): void
 }
 
 const SEAT_NAMES = ['你', '下家', '队友', '上家']
@@ -39,6 +40,7 @@ export function createHud(root: HTMLElement): HudApi {
   hud.innerHTML = `
     <div class="topbar">
       <span class="brand">掼蛋</span>
+      <span class="room-code" id="hud-room-code"></span>
       <span class="stat">你方 <b id="hud-lv-you">2</b> · 对方 <b id="hud-lv-opp">2</b> <span id="hud-banker" class="banker"></span></span>
       <span class="sep"></span>
       <span id="hud-turn">发牌中…</span>
@@ -108,6 +110,7 @@ export function createHud(root: HTMLElement): HudApi {
   const settingsEl = $<HTMLDivElement>('hud-settings')
   const btnSettingsClose = $<HTMLButtonElement>('btn-settings-close')
   const btnClear = $<HTMLButtonElement>('btn-clear')
+  const roomCodeEl = $('hud-room-code')
   const btnLogToggle = $<HTMLButtonElement>('btn-log-toggle')
   const volSlider = $<HTMLInputElement>('set-vol')
   const diffBtns = [...hud.querySelectorAll<HTMLButtonElement>('.diff button')]
@@ -187,6 +190,7 @@ export function createHud(root: HTMLElement): HudApi {
     onQuality: (cb) => qualBtns.forEach((b) => b.addEventListener('click', () => cb(b.dataset.q as Quality))),
     onSort: (cb) => btnSort.addEventListener('click', cb),
     onClear: (cb) => btnClear.addEventListener('click', cb),
+    setRoomCode: (code) => { roomCodeEl.textContent = `房间 ${code}` },
     onMute: (cb) => btnMute.addEventListener('click', () => {
       muted = !muted
       applyMuteIcon()

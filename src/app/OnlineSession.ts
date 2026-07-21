@@ -101,6 +101,7 @@ export class OnlineSession {
     this.deps.hand.setHand(this.hand, this.level, true)
 
     this.deps.hud.setLevels(msg.matchLevels[0], msg.matchLevels[1], msg.banker)
+    this.deps.hud.setRoomCode(this.transport.roomCode ?? '')
     this.deps.hud.message(`联机对战 · 你是 ${this.seatNames[this.localSeat]} (${SEAT_NAMES[this.localSeat]})`)
 
     // 注册按钮回调
