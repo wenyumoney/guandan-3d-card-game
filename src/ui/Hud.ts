@@ -25,6 +25,7 @@ export interface HudApi {
   onVolume(cb: (v: number) => void): void
   onSpeed(cb: (s: number) => void): void
   onSort(cb: () => void): void
+  onClear(cb: () => void): void
 }
 
 const SEAT_NAMES = ['你', '下家', '队友', '上家']
@@ -57,6 +58,7 @@ export function createHud(root: HTMLElement): HudApi {
       <button id="btn-settings" class="mute" title="设置">⚙</button>
     </div>
     <div class="settings" id="hud-settings">
+      <button id="btn-settings-close" class="settings-close" title="关闭">✕</button>
       <div class="srow"><span class="glabel">音量</span><input id="set-vol" type="range" min="0" max="100" value="100"></div>
       <div class="srow"><span class="glabel">动画速度</span><span class="group speed">
         <button data-s="0.7">慢</button>
@@ -67,6 +69,8 @@ export function createHud(root: HTMLElement): HudApi {
     <div class="msg" id="hud-msg"></div>
     <div class="controls">
       <button id="btn-sort" class="sort" title="循环切换排列：点数→同花顺">理牌</button>
+      <button id="btn-clear" class="sort" title="取消选择">重选</button>
+      <button id="btn-log-toggle" class="sort log-toggle" title="出牌记录">📜</button>
       <button id="btn-hint">提示</button>
       <button id="btn-pass">过</button>
       <button id="btn-play" class="primary">出牌</button>
@@ -102,6 +106,9 @@ export function createHud(root: HTMLElement): HudApi {
   const btnMute = $<HTMLButtonElement>('btn-mute')
   const btnSettings = $<HTMLButtonElement>('btn-settings')
   const settingsEl = $<HTMLDivElement>('hud-settings')
+  const btnSettingsClose = $<HTMLButtonElement>('btn-settings-close')
+  const btnClear = $<HTMLButtonElement>('btn-clear')
+  const btnLogToggle = $<HTMLButtonElement>('btn-log-toggle')
   const volSlider = $<HTMLInputElement>('set-vol')
   const diffBtns = [...hud.querySelectorAll<HTMLButtonElement>('.diff button')]
   const qualBtns = [...hud.querySelectorAll<HTMLButtonElement>('.qual button')]
@@ -109,6 +116,8 @@ export function createHud(root: HTMLElement): HudApi {
   let muted = false
 
   btnSettings.addEventListener('click', () => settingsEl.classList.toggle('show'))
+  btnSettingsClose.addEventListener('click', () => settingsEl.classList.remove('show'))
+  btnLogToggle.addEventListener('click', () => logEl.classList.toggle('show-mobile'))
 
   const applyMuteIcon = (): void => {
     btnMute.textContent = muted ? '🔇' : '🔊'
@@ -177,6 +186,7 @@ export function createHud(root: HTMLElement): HudApi {
     onDifficulty: (cb) => diffBtns.forEach((b) => b.addEventListener('click', () => cb(b.dataset.d as Difficulty))),
     onQuality: (cb) => qualBtns.forEach((b) => b.addEventListener('click', () => cb(b.dataset.q as Quality))),
     onSort: (cb) => btnSort.addEventListener('click', cb),
+    onClear: (cb) => btnClear.addEventListener('click', cb),
     onMute: (cb) => btnMute.addEventListener('click', () => {
       muted = !muted
       applyMuteIcon()

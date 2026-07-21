@@ -123,6 +123,7 @@ export class GameSession {
       const mode = deps.hand.cycleSortMode()
       deps.hud.message(`理牌：${mode}`)
     })
+    deps.hud.onClear(() => deps.hand.clearSelection())
     deps.hud.onDifficulty((d) => this.setDifficulty(d))
     deps.hand.onSelectionChange(() => {
       if (!this._active || !this.round) return

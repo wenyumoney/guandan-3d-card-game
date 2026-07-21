@@ -64,6 +64,11 @@ export function createHandView(scene: THREE.Scene, camera: THREE.Camera, dom: HT
   let dragging = false
   let paintMode: 'add' | 'remove' = 'add'
   let lastPainted: string | null = null
+  // 移动端触屏：双指Tap + 长按检测
+  let lastTapId: string | null = null
+  let lastTapTime = 0
+  let longPressTimer: ReturnType<typeof setTimeout> | null = null
+  let longPressFired = false
 
   const raycaster = new THREE.Raycaster()
   const ndc = new THREE.Vector2()
@@ -143,6 +148,11 @@ export function createHandView(scene: THREE.Scene, camera: THREE.Camera, dom: HT
   function onMove(ev: PointerEvent): void {
     if (dealing) return
     const m = pick(ev)
+    // 移动时取消长按定时器（手指滑动 ≠ 长按）
+    if (longPressTimer && !longPressFired && m) {
+      clearTimeout(longPressTimer)
+      longPressTimer = null
+    }
     if (dragging) {
       // 拖动连选：划过新牌即按 paintMode 涂选（锁定时跳过）
       if (!locked && m && cardOf(m).id !== lastPainted) {
@@ -163,6 +173,9 @@ export function createHandView(scene: THREE.Scene, camera: THREE.Camera, dom: HT
 
   function onDown(ev: PointerEvent): void {
     if (dealing) return
+    ev.preventDefault()
+    dom.setPointerCapture(ev.pointerId)
+
     const m = pick(ev)
     if (!m || !isUsable(m)) {
       // 点击空白/置灰牌 → 解锁并清除选中
@@ -175,6 +188,46 @@ export function createHandView(scene: THREE.Scene, camera: THREE.Camera, dom: HT
       return
     }
     const id = cardOf(m).id
+
+    // ── 双击检测（移动端双指Tap，桌面端 dblclick 仍独立可用）──
+    if (id === lastTapId && performance.now() - lastTapTime < 400) {
+      lastTapId = null
+      lastTapTime = 0
+      if (selected.has(id)) {
+        locked = !locked
+      } else {
+        locked = false
+        const rank = cardOf(m).rank
+        for (const mm of meshes) {
+          const c = cardOf(mm)
+          if (c.rank === rank && (playable === null || playable.has(c.id))) selected.add(c.id)
+        }
+      }
+      layout()
+      selCb(getSelected())
+      return
+    }
+    lastTapId = id
+    lastTapTime = performance.now()
+
+    // ── 长按检测：600ms 不动 → 选中所有同点数牌 ──
+    longPressFired = false
+    if (longPressTimer) clearTimeout(longPressTimer)
+    longPressTimer = setTimeout(() => {
+      longPressFired = true
+      longPressTimer = null
+      if (!selected.has(id)) {
+        locked = false
+        const rank = cardOf(m).rank
+        for (const mm of meshes) {
+          const c = cardOf(mm)
+          if (c.rank === rank && (playable === null || playable.has(c.id))) selected.add(c.id)
+        }
+        layout()
+        selCb(getSelected())
+      }
+    }, 600)
+
     // 锁定时：点击已选牌 → 不解锁（故意），点击非已选牌 → 解锁并切换选择
     if (locked) {
       if (!selected.has(id)) {
@@ -200,6 +253,10 @@ export function createHandView(scene: THREE.Scene, camera: THREE.Camera, dom: HT
   }
 
   function onUp(): void {
+    if (longPressTimer) {
+      clearTimeout(longPressTimer)
+      longPressTimer = null
+    }
     dragging = false
     lastPainted = null
   }

@@ -7,9 +7,13 @@
   --panel: rgba(20, 16, 12, 0.74);
 }
 * { box-sizing: border-box; }
-html, body { margin: 0; height: 100%; overflow: hidden; background: #120d09; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: #120d09; overscroll-behavior: none; }
+:root {
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
 #app { position: fixed; inset: 0; }
-canvas { display: block; }
+canvas { display: block; touch-action: manipulation; }
 
 #hud {
   position: fixed; inset: 0; pointer-events: none;
@@ -19,7 +23,7 @@ canvas { display: block; }
 
 /* ── 顶栏：描金回纹边框 ── */
 #hud .topbar {
-  position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+  position: absolute; top: calc(12px + var(--safe-top)); left: 50%; transform: translateX(-50%);
   display: flex; gap: 14px; align-items: center;
   padding: 8px 16px; border-radius: 10px;
   background: var(--panel);
@@ -67,7 +71,7 @@ canvas { display: block; }
 
 /* ── 底部控制 ── */
 #hud .controls {
-  position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
+  position: absolute; bottom: calc(20px + var(--safe-bottom)); left: 50%; transform: translateX(-50%);
   display: flex; gap: 12px; align-items: center; pointer-events: auto;
 }
 #hud button {
@@ -83,8 +87,11 @@ canvas { display: block; }
 #hud button.primary { background: linear-gradient(#93313f, var(--red)); }
 #hud button.sort { padding: 10px 16px; font-size: 13px; }
 
+/* 出牌记录切换按钮：桌面端隐藏 */
+#hud button.log-toggle { display: none; }
+
 #hud .msg {
-  position: absolute; bottom: 78px; left: 50%; transform: translateX(-50%);
+  position: absolute; bottom: calc(78px + var(--safe-bottom)); left: 50%; transform: translateX(-50%);
   font-size: 14px; color: var(--gold-hi); min-height: 20px; text-align: center;
   text-shadow: 0 1px 4px rgba(0,0,0,.7);
 }
@@ -141,6 +148,13 @@ canvas { display: block; }
   pointer-events: auto; width: 150px; accent-color: var(--gold);
 }
 #hud .settings .group button { padding: 3px 10px; border-radius: 6px; font-size: 12px; }
+#hud .settings .settings-close {
+  position: absolute; top: 4px; right: 8px;
+  padding: 2px 8px; border-radius: 4px; cursor: pointer;
+  background: transparent; border: none; color: rgba(244,236,216,.55);
+  font-size: 15px; line-height: 1;
+}
+#hud .settings .settings-close:hover { color: var(--ink); }
 
 /* ── 开局菜单 ── */
 #menu {
@@ -336,6 +350,7 @@ canvas { display: block; }
   /* 控制按钮：确保触控尺寸 */
   #hud button { padding: 12px 20px; font-size: 15px; min-height: 44px; }
   #hud button.sort { padding: 10px 14px; }
+  #hud button.log-toggle { display: inline-block; padding: 8px 10px; font-size: 16px; min-height: 36px; }
   #hud .controls { bottom: 12px; gap: 8px; }
 
   /* 出牌记录：移动端默认隐藏 */

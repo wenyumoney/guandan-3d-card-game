@@ -111,6 +111,7 @@ export class OnlineSession {
       const mode = this.deps.hand.cycleSortMode()
       this.deps.hud.message(`理牌：${mode}`)
     })
+    this.deps.hud.onClear(() => this.deps.hand.clearSelection())
     this.deps.hand.onSelectionChange(() => this.refreshControls())
 
     // 键盘快捷键
