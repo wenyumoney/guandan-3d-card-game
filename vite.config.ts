@@ -1,6 +1,7 @@
 import { defineConfig, type Plugin } from 'vite'
 import { WebSocketServer, WebSocket as WS } from 'ws'
 import { RoomManager } from './server/room'
+import type { Seat } from './src/core/deal'
 
 const WS_OPEN = WS.OPEN
 
@@ -50,8 +51,14 @@ function wsServerPlugin(): Plugin {
               const result = rooms.joinRoom(msg.roomCode as string, msg.playerName as string, ws)
               if (!result.ok) { send(ws, { type: 'error', message: result.error! }); return }
               playerId = result.playerId!; roomCode = msg.roomCode as string
-              send(ws, { type: 'room_joined', roomCode: roomCode!, playerId: playerId!, players: result.players!, seats: result.seats! })
-              broadcastRoomUpdate(roomCode!)
+              if (result.isMidGame) {
+                const sync = rooms.getGameSyncData(roomCode, playerId)
+                if (sync) send(ws, { type: 'game_sync', ...sync })
+                broadcastRoomUpdate(roomCode!)
+              } else {
+                send(ws, { type: 'room_joined', roomCode: roomCode!, playerId: playerId!, players: result.players!, seats: result.seats! })
+                broadcastRoomUpdate(roomCode!)
+              }
               break
             }
 
@@ -71,8 +78,10 @@ function wsServerPlugin(): Plugin {
                 const c = rooms.getClient(roomCode, sm.playerId as string)
                 if (c) send(c, { type: 'game_start', ...sm })
               }
-              if (r.firstTurn) broadcastToRoom(roomCode, r.firstTurn)
-              if (r.firstAiSeat != null) rooms.scheduleAiTurn(roomCode, r.firstAiSeat)
+              // 延迟发送 turn_notify（等客户端发牌动画 ~1.1s 完成）
+              const rc = roomCode
+              if (r.firstTurn) { const ft = r.firstTurn; setTimeout(() => broadcastToRoom(rc, ft), 1200) }
+              if (r.firstAiSeat != null) { const aiSeat = r.firstAiSeat as Seat; setTimeout(() => rooms.scheduleAiTurn(rc, aiSeat), 1200) }
               break
             }
 
@@ -121,7 +130,11 @@ function wsServerPlugin(): Plugin {
 }
 
 function send(ws: { readyState: number; send(data: string): void }, msg: Record<string, unknown>): void {
-  if (ws.readyState === WS_OPEN) ws.send(JSON.stringify(msg))
+  if (ws.readyState === WS_OPEN) {
+    ws.send(JSON.stringify(msg))
+  } else {
+    console.warn(`[send] 丢弃 ${msg.type} — WebSocket 状态=${ws.readyState}`)
+  }
 }
 
 export default defineConfig({
